@@ -21,6 +21,7 @@ tf.set_random_seed(1) # on the other hand, this is basically useless (see issue 
 # import our problems, networks and training modules
 from tools import problems,networks,train
 
+
 # Create the basic problem structure.
 prob = problems.bernoulli_gaussian_trial(kappa=None,M=250,N=500,L=1000,pnz=.1,SNR=40) #a Bernoulli-Gaussian x, noisily observed through a random matrix
 #prob = problems.random_access_problem(2) # 1 or 2 for compressive random access or massive MIMO
@@ -29,7 +30,7 @@ print('A is:')
 print(prob.A)
 
 # build a LAMP network to solve the problem and get the intermediate results so we can greedily extend and then refine(fine-tune)
-layers = networks.build_LAMP(prob,T=6,shrink='soft',untied=False)
+layers = networks.build_LAMP(prob,T=8,shrink='soft',untied=False)
 print('Building layers ... done')
 
 # plan the learning
@@ -38,11 +39,13 @@ print('Plan the learning ... done')
 
 # do the learning (takes a while)
 print('Do the learning (takes a while)')
-sess = train.do_training(training_stages,prob,'LAMP_bg_giid.npz')
+sess = train.do_training(training_stages,prob,'LAMP_bg_giid.npz',10,3000,50)
 
 # train.plot_estimate_to_test_message(sess, training_stages, prob, 'LAMP_bg_giid.npz' )
 # train.test_vector_sizes(sess, training_stages, prob, 'LAMP_bg_giid.npz' )
 train.evaluate_nmse(sess, training_stages, prob, 'LAMP_bg_giid.npz' )
+
+train_vars = train.get_train_variables(sess)
 
 
 stop = 1;

@@ -5,6 +5,7 @@ import numpy as np
 import numpy.linalg as la
 import sys
 import tensorflow as tf
+import time
 
 def save_trainable_vars(sess,filename,**kwargs):
     """save a .npz archive in `filename`  with
@@ -35,6 +36,17 @@ def load_trainable_vars(sess,filename):
     except IOError:
         pass
     return other
+
+def get_train_variables(sess):
+    """save a .npz archive in `filename`  with
+        the current value of each variable in tf.trainable_variables()
+        plus any keyword numpy arrays.
+        """
+    save={}
+    for v in tf.trainable_variables():
+        save[str(v.name)] = sess.run(v)
+    
+    return save
 
 def setup_training(layer_info,prob, trinit=1e-3,refinements=(.5,.1,.01),final_refine=None ):
     """ Given a list of layer info (name,xhat_,newvars),
@@ -72,7 +84,7 @@ def setup_training(layer_info,prob, trinit=1e-3,refinements=(.5,.1,.01),final_re
     return training_stages
 
 
-def do_training(training_stages,prob,savefile,ivl=10,maxit=3000,better_wait=50):
+def do_training(training_stages,prob,savefile,ivl=10,maxit=1000000,better_wait=5000):
     """
     ivl:how often should we compute the nmse of the validation set?
     maxit: max number of training iterations
@@ -92,6 +104,7 @@ def do_training(training_stages,prob,savefile,ivl=10,maxit=3000,better_wait=50):
     log=str(state.get('log',''))
 
     for name,xhat_,loss_,nmse_,train_,var_list in training_stages:
+        start = time.time()
         if name in done:
             print('Already did ' + name + '. Skipping.')
             continue
@@ -120,7 +133,10 @@ def do_training(training_stages,prob,savefile,ivl=10,maxit=3000,better_wait=50):
             y,x = prob(sess)
             sess.run(train_,feed_dict={prob.y_:y,prob.x_:x} )
         done = np.append(done,name)
-
+        
+        end = time.time()
+        time_log = 'Took me {totaltime:.3f} minutes, or {time_per_interation:.1f} ms per iteration'.format(totaltime = (end-start)/60, time_per_interation = (end-start)*1000/i)
+        print(time_log)
         log =  log+'\n{name} nmse={nmse:.6f} dB in {i} iterations'.format(name=name,nmse=nmse_dB,i=i)
 
         state['done'] = done
@@ -128,38 +144,7 @@ def do_training(training_stages,prob,savefile,ivl=10,maxit=3000,better_wait=50):
         save_trainable_vars(sess,savefile,**state)
     return sess
 
-
-def plot_estimate_to_test_message(sess, training_stages, prob, savefile, pnz=.1, SNR=20):
-
-    import math
-    import matplotlib.pyplot as plt
-
-    A = prob.A
-    M,N = A.shape
-
-    noise_var = pnz*N/M * math.pow(10., -SNR / 10.)
-
-    xtest = ((np.random.uniform( 0,1,(N,1))<pnz) * np.random.normal(0,1,(N,1))).astype(np.float32)
-    ytest = np.matmul(A, xtest) + np.random.normal(0,math.sqrt( noise_var ),(M,1))
-
-
-    for name, xhat_, loss_, nmse_, train_, var_list in training_stages:
-
-        fig_counter = 1
-        if " trainrate=" not in name:
-            xest = sess.run(xhat_, feed_dict={prob.y_: ytest})
-            nmse = sess.run(nmse_, feed_dict={prob.y_: ytest, prob.x_: xtest})
-            nmse_dB = 10 * np.log10(nmse)
-
-            plt.figure(fig_counter)
-            plt.stem(xtest, markerfmt='.', label='true')
-            plt.stem(xest, linefmt=':', markerfmt='x', label=name)
-            plt.legend()
-            plt.title('{name} nmse={nmse:.6f} dB'.format(name=name,nmse=nmse_dB))
-            plt.show()
-
-
-def evaluate_nmse(sess, training_stages, prob, savefile, pnz=.1, SNR=20):
+def evaluate_nmse(sess, training_stages, prob, savefile, pnz=.1, SNR=40):
     import math
 
     A = prob.A
@@ -179,38 +164,3 @@ def evaluate_nmse(sess, training_stages, prob, savefile, pnz=.1, SNR=20):
             nmse = sess.run(nmse_, feed_dict={prob.y_: ytest, prob.x_: xtest})
             nmse_dB = 10 * np.log10(nmse)
             print('{name} nmse={nmse:.6f} dB'.format(name=name,nmse=nmse_dB))
-
-def test_vector_sizes(sess, training_stages, prob, savefile, pnz=.1, SNR=40):
-
-    import math
-    import matplotlib.pyplot as plt
-
-    L = 2
-
-    A = prob.A
-    M,N = A.shape
-
-    noise_var = pnz*N/M * math.pow(10., -SNR / 10.)
-
-    xtest = ((np.random.uniform( 0,1,(N,L))<pnz) * np.random.normal(0,1,(N,L))).astype(np.float32)
-    ytest = np.matmul(A,xtest) + np.random.normal(0,math.sqrt( noise_var ),(M,L)).astype(np.float32)
-
-
-    import tools.shrinkage as shrinkage
-    eta, theta_init = shrinkage.get_shrinkage_function('bg')
-
-    A = prob.A
-    M, N = A.shape
-    B = A.T / (1.01 * la.norm(A, 2) ** 2)
-    B_ = tf.Variable(B, dtype=tf.float32, name='B_0')
-    By_ = tf.matmul(B_, tf.convert_to_tensor(ytest))
-
-    theta_ = tf.Variable(theta_init,dtype=tf.float32,name='theta_0')
-    OneOverM = tf.constant(float(1)/M,dtype=tf.float32)
-    NOverM = tf.constant(float(N)/M,dtype=tf.float32)
-    rvar_ = tf.reduce_sum(tf.square(tf.convert_to_tensor(ytest)),0) * OneOverM
-
-    # sth1, sth2 = By_.get_shape()
-    # print('Shape is: ' + str(sth1) + ' x ' + str(sth2))
-
-    (xhat_,dxdr_) = eta( By_,rvar_ , theta_ )

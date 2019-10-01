@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import numpy as np
 import numpy.linalg as la
+import math
 
 import tensorflow as tf
 import tools.shrinkage as shrinkage
@@ -54,6 +55,7 @@ def build_LAMP(prob,T,shrink,untied):
     A = prob.A
     M,N = A.shape
     B = A.T / (1.01 * la.norm(A,2)**2)
+    # B = A.T * math.sqrt(M)/ (1.01 * la.norm(A,2)**2)
     B_ =  tf.Variable(B,dtype=tf.float32,name='B_0')
     By_ = tf.matmul( B_ , prob.y_ )
     layers.append( ('Linear',By_,None) )
@@ -65,10 +67,6 @@ def build_LAMP(prob,T,shrink,untied):
     OneOverM = tf.constant(float(1)/M,dtype=tf.float32)
     NOverM = tf.constant(float(N)/M,dtype=tf.float32)
     rvar_ = tf.reduce_sum(tf.square(prob.y_),0) * OneOverM
-
-    # sth1, sth2 = By_.get_shape()
-    # print('Shape is: ' + str(sth1) + ' x ' + str(sth2))
-
     (xhat_,dxdr_) = eta( By_,rvar_ , theta_ )
     layers.append( ('LAMP-{0} T=1'.format(shrink),xhat_,(theta_,) ) )
 

@@ -76,9 +76,6 @@ def shrink_bgest(r,rvar,theta):
         The probability of nonzero x[i]
             lamba = 1/(exp(theta[1])+1)
     """
-    sth, data_set_size = r.get_shape()
-    print('Shape is: ' + str(sth) + ' x ' + str(data_set_size))
-
     xvar1 = abs(theta[...,0])
     loglam = theta[...,1] # log(1/lambda - 1)
     beta = 1/(1+rvar/xvar1)

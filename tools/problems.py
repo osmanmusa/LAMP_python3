@@ -33,7 +33,6 @@ class NumpyGenerator(Generator):
 def bernoulli_gaussian_trial(M=250,N=500,L=1000,pnz=.1,kappa=None,SNR=40):
 
     A = np.random.normal(size=(M, N), scale=1.0 / math.sqrt(M)).astype(np.float32)
-    print('The measurement matrix A is: ' + str(A))
     if not(kappa is None):
         if kappa >= 1:
             # create a random operator with a specific condition number
